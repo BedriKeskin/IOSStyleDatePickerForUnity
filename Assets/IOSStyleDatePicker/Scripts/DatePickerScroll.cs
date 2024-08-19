@@ -1,3 +1,5 @@
+// Scroll is inspired from https://assetstore.unity.com/packages/tools/input-management/scroll-flow-190674
+
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
@@ -9,14 +11,13 @@ namespace IOSStyleDatePicker.Scripts
 {
     internal enum DateObject { Month, Day, Year }
 
-    public class DatePickerScroll : MonoBehaviour, IDropHandler, IDragHandler, IBeginDragHandler
+    public class DatePickerScroll : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IDragHandler
     {
         [SerializeField] private DateObject dateObject;
 
         public GameObject datePickerScrollItem;
 
         [Header("Required objects")]
-        public Camera camera;
         public RectTransform content;
 
         [Header("Settings")]
@@ -30,7 +31,7 @@ namespace IOSStyleDatePicker.Scripts
         public float maxFontSize;
 
         bool isDragging;
-        float inertia, startPosContent, startPosMouse, middle, heightText = 27;
+        float inertia, startPosContent, startPosMouse, swipeDistance, middle, heightText = 27;
         int countCheck = 4, currentCenter, yearsMin;
 
         private List<string> list = new();
@@ -108,14 +109,11 @@ namespace IOSStyleDatePicker.Scripts
                 if (item == items.Last()) component.GetChild(2).GetComponent<Image>().gameObject.SetActive(true);
             }
 
-            // StartCoroutine(UpdateLayout());
             UpdateLayout();
         }
 
         private void UpdateLayout()
         {
-            // yield return new WaitForEndOfFrame();
-
             float sizeTotal = middle - heightText;
         
             foreach (Transform transform in content.transform)
@@ -134,33 +132,12 @@ namespace IOSStyleDatePicker.Scripts
         {
             if (isDragging)
             {
-                inertia = startPosContent + (-startPosMouse + (Input.mousePosition.y / camera.pixelHeight) * content.sizeDelta.y) - content.anchoredPosition.y;
-                content.anchoredPosition = new Vector2(0, Mathf.Clamp(startPosContent + (-startPosMouse + (Input.mousePosition.y / camera.pixelHeight) * content.sizeDelta.y), 0, content.sizeDelta.y - middle * 2));
+                inertia = startPosContent + swipeDistance;
+                content.anchoredPosition = new Vector2(0, Mathf.Clamp(inertia, 0, content.sizeDelta.y - middle * 2));
             }
             else
             {
-                if (content.anchoredPosition.y + inertia < 0)
-                {
-                    content.anchoredPosition = new Vector2(0, 0);
-                    inertia = 0;
-                }
-                else if (content.anchoredPosition.y + inertia > content.sizeDelta.y - middle * 2)
-                {
-                    content.anchoredPosition = new Vector2(0, content.sizeDelta.y - middle * 2);
-                    inertia = 0;
-                }
-                else
-                {
-                    if (inertia > Time.deltaTime)
-                    {
-                        content.anchoredPosition = new Vector2(0, content.anchoredPosition.y + inertia);
-                        inertia = Mathf.Lerp(inertia, 0, 10*Time.deltaTime);
-                    }
-                    else if (!Mathf.Approximately(content.anchoredPosition.y, Mathf.Abs(-content.transform.GetChild(currentCenter).GetComponent<RectTransform>().anchoredPosition.y - middle)))
-                    {
-                        content.anchoredPosition = new Vector2(0, Mathf.Lerp(content.anchoredPosition.y, -content.transform.GetChild(currentCenter).GetComponent<RectTransform>().anchoredPosition.y - middle, 10*Time.deltaTime));
-                    }
-                }
+                content.anchoredPosition = new Vector2(0, Mathf.Lerp(content.anchoredPosition.y, -content.transform.GetChild(currentCenter).GetComponent<RectTransform>().anchoredPosition.y - middle, 10*Time.deltaTime));
             }
 
             float contentPos = content.anchoredPosition.y;
@@ -183,21 +160,22 @@ namespace IOSStyleDatePicker.Scripts
                 currentText.color = new Vector4(currentText.color.r, currentText.color.g, currentText.color.b, Mathf.Clamp((ratio - colorPad) / (1 - colorPad), 0, 1));
             }
         }
+        
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            startPosMouse = eventData.position.y;
+            startPosContent = content.anchoredPosition.y;
+        }
 
-        public void OnDrop(PointerEventData eventData)
+        public void OnPointerUp(PointerEventData eventData)
         {
             isDragging = false;
         }
 
         public void OnDrag(PointerEventData eventData)
         {
-        }
-
-        public void OnBeginDrag(PointerEventData eventData)
-        {
-            isDragging = true;
-            startPosMouse = Input.mousePosition.y / camera.pixelHeight * content.sizeDelta.y;
-            startPosContent = content.anchoredPosition.y;
+            isDragging = true; 
+            swipeDistance = eventData.position.y - startPosMouse;
         }
 
         public string GetValue()
